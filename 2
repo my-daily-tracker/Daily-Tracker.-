@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Productivity & Wellness Tracker — Digital Journal</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root{--bg:#f7fafc;--card:#ffffff;--muted:#6b7280;--accent:#2563eb}
+    body{font-family:Inter, system-ui, Arial, sans-serif;background:var(--bg);color:#111;margin:0;padding:20px}
+    .container{max-width:1100px;margin:0 auto}
+    header{display:flex;align-items:center;justify-content:space-between}
+    h1{margin:0;font-size:20px}
+    .grid{display:grid;grid-template-columns:1fr 360px;gap:18px;margin-top:18px}
+    .card{background:var(--card);padding:14px;border-radius:10px;box-shadow:0 6px 18px rgba(15,23,42,0.06)}
+    table{width:100%;border-collapse:collapse;font-size:14px}
+    th,td{padding:8px;border-bottom:1px solid #eef2f7;text-align:left}
+    th{background:#f1f5f9}
+    .tabs{display:flex;gap:8px;margin-bottom:12px}
+    .tab{padding:8px 12px;border-radius:8px;cursor:pointer;background:#eef2ff;color:var(--accent)}
+    .tab.active{background:var(--accent);color:#fff}
+    .small{font-size:13px;color:var(--muted)}
+    .row{display:flex;gap:10px;align-items:center}
+    input[type="number"], input[type="text"]{padding:8px;border-radius:6px;border:1px solid #e6edf3}
+    textarea{width:100%;min-height:120px;padding:10px;border-radius:6px;border:1px solid #e6edf3}
+    .save-btn{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer}
+    .chk {margin-right:6px}
+    .date-nav{display:flex;gap:6px;flex-wrap:wrap}
+    .date-btn{padding:6px 8px;border-radius:6px;border:1px solid #e6edf3;background:#fff;cursor:pointer}
+    .date-btn.active{background:#e6eefc;border-color:var(--accent)}
+    .legend{display:flex;gap:8px;align-items:center}
+    .legend div{display:flex;gap:6px;align-items:center}
+    .badge{padding:4px 8px;background:#eef2f7;border-radius:999px;font-size:12px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🌟 Digital Journal — Productivity & Wellness Tracker</h1>
+      <div class="small">Saved locally in your browser (keeps data after refresh)</div>
+    </header>
+
+    <div class="grid">
+      <div>
+        <div class="card">
+          <div class="tabs" id="mainTabs">
+            <div class="tab active" data-tab="timetable">Timetable</div>
+            <div class="tab" data-tab="workout">Workout Plan</div>
+            <div class="tab" data-tab="weight">Weight</div>
+            <div class="tab" data-tab="journal">Weekly Journal</div>
+          </div>
+
+          <div id="content">
+            <!-- Timetable content injected here -->
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <h3 style="margin:0 0 8px 0">Import / Export</h3>
+          <div class="small">You can export all data as JSON or import a JSON file to restore.</div>
+          <div style="margin-top:10px;display:flex;gap:8px">
+            <button class="save-btn" id="exportBtn">Export JSON</button>
+            <input type="file" id="importFile" accept="application/json">
+          </div>
+        </div>
+      </div>
+
+      <aside>
+        <div class="card">
+          <h3 style="margin-top:0">Quick Stats</h3>
+          <div class="small">Today's progress</div>
+          <div style="margin-top:10px" id="todayProgress">0 / 0 tasks done</div>
+          <hr>
+          <h4 style="margin:8px 0 6px 0">Weight Chart</h4>
+          <canvas id="miniWeight" width="300" height="160"></canvas>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h4 style="margin:0 0 8px 0">Legend</h4>
+          <div class="legend">
+            <div><span class="badge">✓</span><span class="small">Done</span></div>
+            <div><span class="badge">—</span><span class="small">Not done</span></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    // ========== Embedded Excel data (from your uploaded file) ==========
+    const initialData = {
+      "Sheet2": 
+      %SHEET2%,
+      "weekdays TT September 2025": 
+      %WEEKDAYS%,
+      "weekends TT September 2025": 
+      %WEEKENDS%
+    };
+
+    // Utility: save/load to localStorage
+    const STORAGE_KEY = 'wellness_journal_v1';
+    function saveState(state){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    function loadState(){ try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch(e){ return {}; } }
+
+    // Initialize state: if not present, use initialData to construct structure
+    let state = loadState();
+    if(!state.initialized){
+      state.initialized = true;
+      state.timetable = buildTimetableFromExcel(initialData);
+      state.workout = buildWorkoutFromExcel(initialData);
+      state.weights = [];
+      state.journal = {};
+      saveState(state);
+    }
+
+    // ========== Converters to transform Excel raw rows into structured objects ==========
+    function buildTimetableFromExcel(data){
+      const sheet = data['weekdays TT September 2025'];
+      // The sheet likely has header rows; we'll detect date columns and build an array of "entries" per row
+      const header = sheet[0];
+      // Find column indexes for Time and Activity
+      let timeCol = 0, activityCol = 1;
+      // Dates start from column index 2 onward (if present)
+      const dates = header.slice(2).map(cell => cell.trim()).filter(c=>c);
+      const entries = [];
+      for(let r=1;r<sheet.length;r++){
+        const row = sheet[r];
+        const time = row[timeCol] || '';
+        const activity = row[activityCol] || '';
+        if(!time && !activity) continue;
+        // For each date column, capture value if present
+        const perDate = {};
+        for(let c=2;c<row.length;c++){
+          const dateLabel = header[c] ? header[c].trim() : ('col'+c);
+          perDate[dateLabel] = row[c] || '';
+        }
+        entries.push({time, activity, perDate});
+      }
+      return {dates: dates, rows: entries};
+    }
+
+    function buildWorkoutFromExcel(data){
+      const sheet = data['Sheet2'];
+      // Convert rows into grouped sections: day titles followed by exercise rows
+      const groups = [];
+      let current = null;
+      for(let r=0;r<sheet.length;r++){
+        const row = sheet[r];
+        const first = (row[0]||'').trim();
+        if(!first && (row.join('').trim()==='')) continue;
+        // Heuristic: lines that contain 'Monday' or 'Tuesday' or 'Focus:' or 'Duration:' considered headings
+        if(/Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Focus:|Duration:/i.test(first) || /–/.test(first)){
+          if(current && current.rows && current.rows.length) groups.push(current);
+          current = {title: first, rows: []};
+          // if the row appears to have more columns as header, store them
+          continue;
+        }
+        // Otherwise treat as exercise/details row
+        if(!current) current = {title: 'General', rows: []};
+        current.rows.push(row);
+      }
+      if(current && current.rows.length) groups.push(current);
+      return groups;
+    }
+
+    // ========== UI rendering ==========
+    const content = document.getElementById('content');
+    const tabs = document.getElementById('mainTabs');
+    tabs.addEventListener('click', (e)=>{
+      const t = e.target.closest('.tab'); if(!t) return;
+      document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+      t.classList.add('active'); renderTab(t.dataset.tab);
+    });
+
+    function renderTab(tab){
+      if(tab==='timetable') return renderTimetable();
+      if(tab==='workout') return renderWorkout();
+      if(tab==='weight') return renderWeight();
+      if(tab==='journal') return renderJournal();
+    }
+
+    // ---------- Timetable ----------
+    function renderTimetable(){
+      content.innerHTML = '';
+      const card = document.createElement('div');
+      card.innerHTML = `<h3 style="margin:0">📅 Timetable (from Excel)</h3><div class="small">Click checkboxes to mark done — saved locally.</div><div style="margin-top:12px" id="timetableContainer"></div>`;
+      content.appendChild(card);
+
+      const container = card.querySelector('#timetableContainer');
+      const tt = state.timetable;
+      // Date buttons
+      const dates = tt.dates.length ? tt.dates : Object.keys(tt.rows[0].perDate || {});
+      const dateNav = document.createElement('div'); dateNav.className='date-nav';
+      dates.forEach((d, idx)=>{
+        const btn = document.createElement('button'); btn.className='date-btn'; btn.textContent = d || ('col'+(idx+1));
+        btn.addEventListener('click', ()=>{ document.querySelectorAll('.date-btn').forEach(x=>x.classList.remove('active')); btn.classList.add('active'); renderTimetableForDate(d); });
+        dateNav.appendChild(btn);
+      });
+      container.appendChild(dateNav);
+      if(dates.length) dateNav.querySelector('.date-btn').classList.add('active');
+      // initial render
+      renderTimetableForDate(dates[0]);
+    }
+
+    function renderTimetableForDate(dateLabel){
+      const container = document.querySelector('#timetableContainer');
+      // remove existing table if any
+      const existing = container.querySelector('.tt-table'); if(existing) existing.remove();
+      const table = document.createElement('table'); table.className='tt-table';
+      table.innerHTML = `<thead><tr><th>Time</th><th>Activity</th><th>Done</th></tr></thead>`;
+      const tbody = document.createElement('tbody');
+      const rows = state.timetable.rows;
+      let total = 0, done = 0;
+      rows.forEach((r, idx)=>{
+        const val = r.perDate[dateLabel] || r.activity || '';
+        if(!val) return; // skip blank entries
+        total++;
+        const tr = document.createElement('tr');
+        const chId = `tt-${dateLabel}-${idx}`;
+        const checked = (state.journal[dateLabel] && state.journal[dateLabel].tasks && state.journal[dateLabel].tasks[chId]) || false;
+        if(checked) done++;
+        tr.innerHTML = `<td>${r.time}</td><td>${val}</td><td><input class='chk' type='checkbox' id='${chId}' ${checked?'checked':''}></td>`;
+        tbody.appendChild(tr);
+        tr.querySelector('input').addEventListener('change', (e)=>{
+          state.journal[dateLabel] = state.journal[dateLabel]||{};
+          state.journal[dateLabel].tasks = state.journal[dateLabel].tasks||{};
+          state.journal[dateLabel].tasks[chId] = e.target.checked;
+          saveState(state);
+          updateTodayProgress(dateLabel);
+        });
+      });
+      table.appendChild(tbody);
+      container.appendChild(table);
+      updateTodayProgress(dateLabel);
+    }
+
+    function updateTodayProgress(dateLabel){
+      const rows = state.timetable.rows.filter(r=> (r.perDate && r.perDate[dateLabel]) || r.activity);
+      const total = rows.length;
+      const tasks = (state.journal[dateLabel] && state.journal[dateLabel].tasks) || {};
+      const done = Object.values(tasks).filter(Boolean).length;
+      document.getElementById('todayProgress').textContent = `${done} / ${total} tasks done`;
+    }
+
+    // ---------- Workout ----------
+    function renderWorkout(){
+      content.innerHTML = `<h3 style='margin:0'>🏋️ Workout Plan</h3><div class='small'>Workout plan imported from Excel (Sheet2). Mark exercises as complete.</div><div id='workContainer' style='margin-top:12px'></div>`;
+      const cont = document.getElementById('workContainer');
+      const groups = state.workout;
+      groups.forEach((g, gi)=>{
+        const s = document.createElement('div');
+        s.style.marginBottom='12px';
+        s.innerHTML = `<strong>${g.title}</strong><table><thead><tr><th>Col 1</th><th>Col 2</th><th>Col 3</th><th>Done</th></tr></thead></table>`;
+        const tbl = s.querySelector('table');
+        const tb = document.createElement('tbody');
+        g.rows.forEach((row, ri)=>{
+          const rId = `work-${gi}-${ri}`;
+          const checked = state.workout_done && state.workout_done[rId];
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${row[0]||''}</td><td>${row[1]||''}</td><td>${row[2]||''}</td><td><input type='checkbox' data-id='${rId}' ${checked?'checked':''}></td>`;
+          tb.appendChild(tr);
+        });
+        tbl.appendChild(tb);
+        cont.appendChild(s);
+      });
+      cont.querySelectorAll("input[type='checkbox']").forEach(cb=>{
+        cb.addEventListener('change', (e)=>{
+          state.workout_done = state.workout_done||{};
+          state.workout_done[e.target.dataset.id] = e.target.checked;
+          saveState(state);
+        });
+      });
+    }
+
+    // ---------- Weight ----------
+    function renderWeight(){
+      content.innerHTML = `<h3 style='margin:0'>📊 Weight Tracker</h3><div class='small'>Add weight entries; they persist in local storage.</div><div style='margin-top:12px'><input id='wVal' type='number' step='0.1' placeholder='Enter weight (kg)'> <button class='save-btn' id='addW'>Add</button></div><div style='margin-top:12px'><canvas id='weightChart' width='600' height='220'></canvas></div>`;
+      document.getElementById('addW').addEventListener('click', ()=>{
+        const v = parseFloat(document.getElementById('wVal').value);
+        if(!v) return alert('Enter a weight value');
+        const now = new Date().toLocaleString();
+        state.weights.push({ts: now, value: v});
+        saveState(state); document.getElementById('wVal').value=''; renderWeight(); renderMiniChart();
+      });
+      // draw chart
+      const ctx = document.getElementById('weightChart').getContext('2d');
+      const labels = state.weights.map(w=>w.ts);
+      const data = state.weights.map(w=>w.value);
+      if(window._weightChart) window._weightChart.destroy();
+      window._weightChart = new Chart(ctx, {type:'line',data:{labels, datasets:[{label:'Weight (kg)',data,fill:true}]}, options:{responsive:true}});
+    }
+
+    // ---------- Journal ----------
+    function renderJournal(){
+      content.innerHTML = `<h3 style='margin:0'>📝 Weekly Journal / Reflections</h3><div class='small'>Select a date and write reflections. Saved locally per date.</div><div style='margin-top:10px' id='journalArea'></div>`;
+      const area = document.getElementById('journalArea');
+      // Show date selector
+      const dates = state.timetable.dates.length ? state.timetable.dates : ['General'];
+      const sel = document.createElement('select'); sel.id='journDate';
+      dates.forEach(d=>{ const o=document.createElement('option'); o.value=d; o.textContent=d; sel.appendChild(o);} );
+      area.appendChild(sel);
+      const ta = document.createElement('textarea'); ta.id='journalText'; ta.style.marginTop='8px'; area.appendChild(ta);
+      const save = document.createElement('button'); save.className='save-btn'; save.textContent='Save Reflection'; save.style.marginTop='8px'; area.appendChild(save);
+      sel.addEventListener('change', ()=>{
+        const d=sel.value; ta.value = (state.journal[d] && state.journal[d].reflection) || '';
+      });
+      save.addEventListener('click', ()=>{
+        const d=sel.value; state.journal[d]=state.journal[d]||{}; state.journal[d].reflection = ta.value; saveState(state); alert('Saved');
+      });
+      // load initial
+      sel.dispatchEvent(new Event('change'));
+    }
+
+    // ---------- Mini chart in aside ----------
+    function renderMiniChart(){
+      const ctx = document.getElementById('miniWeight').getContext('2d');
+      const labels = state.weights.map(w=>w.ts.split(',')[0]);
+      const data = state.weights.map(w=>w.value);
+      if(window._mini) window._mini.destroy();
+      window._mini = new Chart(ctx, {type:'line', data:{labels, datasets:[{label:'kg', data}]}, options:{responsive:true, plugins:{legend:{display:false}}}});
+    }
+
+    // ---------- Import/Export ----------
+    document.getElementById('exportBtn').addEventListener('click', ()=>{
+      const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'wellness_journal_export.json'; a.click(); URL.revokeObjectURL(url);
+    });
+    document.getElementById('importFile').addEventListener('change', (e)=>{
+      const f = e.target.files[0]; if(!f) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{ try { const imported = JSON.parse(reader.result); state = imported; saveState(state); alert('Imported. Reloading UI.'); renderTab(document.querySelector('.tab.active').dataset.tab); renderMiniChart(); } catch(err){ alert('Invalid JSON'); }};
+      reader.readAsText(f);
+    });
+
+    // ========== initial render ==========
+    renderTab('timetable'); renderMiniChart();
+
+  </script>
+</body>
+</html>
