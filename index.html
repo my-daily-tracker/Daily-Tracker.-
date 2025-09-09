@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Productivity & Wellness Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; color: #333; }
+    h2 { color: #444; margin-top: 30px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    th { background: #e9ecef; }
+    .section { background: #fff; padding: 15px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .checkbox-list label { display: block; margin: 5px 0; }
+    textarea { width: 100%; height: 100px; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
+    button { margin-top: 10px; padding: 8px 15px; border: none; background: #007bff; color: #fff; border-radius: 5px; cursor: pointer; }
+    button:hover { background: #0056b3; }
+  </style>
+</head>
+<body>
+  <h1>🌟 My Productivity & Wellness Tracker</h1>
+
+  <!-- Timetable with checkboxes -->
+  <div class="section">
+    <h2>📅 Daily Timetable</h2>
+    <table>
+      <tr><th>Time</th><th>Activity</th><th>Done ✅</th></tr>
+      <tr><td>5:00 AM</td><td>Meditation & Morning Routine</td><td><input type="checkbox"></td></tr>
+      <tr><td>6:00 AM</td><td>Gym</td><td><input type="checkbox"></td></tr>
+      <tr><td>7:15 AM</td><td>Breakfast & Pack Lunch</td><td><input type="checkbox"></td></tr>
+      <tr><td>8:00 AM</td><td>Studies</td><td><input type="checkbox"></td></tr>
+      <tr><td>9:20 AM</td><td>Morning Walk</td><td><input type="checkbox"></td></tr>
+      <tr><td>12:45 PM</td><td>Lunch + Short Walk</td><td><input type="checkbox"></td></tr>
+      <tr><td>5:45 PM</td><td>Evening Walk + Podcast</td><td><input type="checkbox"></td></tr>
+      <tr><td>8:15 PM</td><td>Dinner</td><td><input type="checkbox"></td></tr>
+      <tr><td>9:30 PM</td><td>Skin Care + Journaling</td><td><input type="checkbox"></td></tr>
+    </table>
+  </div>
+
+  <!-- Self-Care Checklist -->
+  <div class="section">
+    <h2>🌿 Self-Care Checklist</h2>
+    <div class="checkbox-list">
+      <label><input type="checkbox"> Skincare Routine</label>
+      <label><input type="checkbox"> Hair Care / Hair Mask</label>
+      <label><input type="checkbox"> Room Cleaning</label>
+      <label><input type="checkbox"> Journaling</label>
+      <label><input type="checkbox"> Relax with Music</label>
+    </div>
+  </div>
+
+  <!-- Weight Tracker -->
+  <div class="section">
+    <h2>📊 Weekly Weight Progress</h2>
+    <input type="number" id="weightInput" placeholder="Enter today's weight (kg)"> 
+    <button onclick="addWeight()">Add</button>
+    <canvas id="weightChart" width="400" height="200"></canvas>
+  </div>
+
+  <!-- Weekly Review -->
+  <div class="section">
+    <h2>📝 Weekly Review & Planning</h2>
+    <textarea placeholder="Reflect on your week... What went well? What to improve?"></textarea>
+    <button>Save Reflection</button>
+  </div>
+
+  <script>
+    const ctx = document.getElementById('weightChart').getContext('2d');
+    let weightData = [];
+    let labels = [];
+
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Weight (kg)',
+          data: weightData,
+          borderColor: 'blue',
+          backgroundColor: 'lightblue',
+          fill: true,
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: { y: { beginAtZero: false } }
+      }
+    });
+
+    function addWeight() {
+      const weight = document.getElementById('weightInput').value;
+      if(weight) {
+        const today = new Date().toLocaleDateString();
+        labels.push(today);
+        weightData.push(weight);
+        chart.update();
+        document.getElementById('weightInput').value = '';
+      }
+    }
+  </script>
+</body>
+</html>
